@@ -2,16 +2,33 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from schemas import user as schemas
 from crud import user as crud
-from database import get_db
 from typing import List
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from passlib.context import CryptContext
+
 import secrets
+from schemas.token import Token
+from schemas.user import User, UserCreate, UserInDBBase
+from models import user as user_model
+from database import get_db
+from .dependencies import get_current_active_user
+from .auth import (
+    get_current_active_user,
+    get_user,
+    authenticate_user,
+    create_access_token,
+    get_current_user,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
 # 路由实例
-router = APIRouter()
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+    responses={404: {"description": "Not found"}},
+)
 
 # 安全设置
 SECRET_KEY = "your-secret-key"
@@ -58,51 +75,20 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
-@router.post("/token", response_model=schemas.Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """用户登录获取令牌"""
-    # 验证验证码
-    stored_captcha = captcha_storage.get(form_data.username)
-    if not stored_captcha or stored_captcha != form_data.captcha:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="验证码错误"
-        )
-    
-    # 删除已使用的验证码
-    if form_data.username in captcha_storage:
-        del captcha_storage[form_data.username]
-    
-    # 验证用户
-    user = crud.get_user_by_username(db, username=form_data.username)
+@router.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    if not crud.verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # 创建访问令牌
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    
-    # 检查是否首次登录
-    first_login = user.is_first_login
-    if first_login:
-        # 更新首次登录状态
-        user.is_first_login = False
-        db.commit()
-    
-    return {"access_token": access_token, "token_type": "bearer", "first_login": first_login}
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/captcha/{username}", response_model=schemas.CaptchaResponse)
 def generate_captcha(username: str):
@@ -120,7 +106,7 @@ def generate_captcha(username: str):
     return {"message": "验证码已发送"}
 
 @router.get("/me", response_model=schemas.User)
-def read_users_me(current_user: schemas.User = Depends(get_current_user)):
+def read_users_me(current_user: schemas.User = Depends(get_current_active_user())):
     """获取当前用户信息"""
     return current_user
 
