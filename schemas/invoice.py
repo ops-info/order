@@ -27,7 +27,7 @@ class InvoiceInDBBase(InvoiceBase):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Invoice(InvoiceInDBBase):
     """返回给客户端的发票模型"""

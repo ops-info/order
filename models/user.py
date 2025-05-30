@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from base import Base
+from .base import Base
 
 class User(Base):
     """用户表模型"""

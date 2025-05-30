@@ -4,6 +4,16 @@ from sqlalchemy.orm import Session
 from models import invoice, order, user
 from database import SessionLocal, engine
 from routers import user, order, invoice
+import sys
+import os
+
+# 将 order 目录添加到 sys.path 中
+order_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, order_dir)
+
+from models import invoice, order, user
+from database import SessionLocal, engine
+from routers import user, order, invoice
 
 # 创建数据库表
 models.Base.metadata.create_all(bind=engine)

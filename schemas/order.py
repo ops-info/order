@@ -55,7 +55,7 @@ class OrderInDBBase(OrderBase):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Order(OrderInDBBase):
     """返回给客户端的订单模型"""
